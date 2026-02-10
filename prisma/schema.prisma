@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+  output = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+//// ENUMS ////
+
+enum CheckType {
+  IN
+  OUT
+}
+
+enum ItemTransactionType {
+  BORROW
+  RETURN
+  LOST
+  DAMAGED
+  ADJUSTMENT
+}
+
+enum GuestVisitType {
+  IN
+  OUT
+}
+
+//// MODELS ////
+
+model User {
+  id             String   @id @default(uuid())
+  name           String
+  email          String   @unique
+  phoneNumber    String?
+  passwordHash   String
+  isActive       Boolean  @default(true)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  roles          UserRole[]
+  checkLogs      CheckLog[]        @relation("UserCheckLogs")
+  processedLogs  CheckLog[]        @relation("ProcessedCheckLogs")
+  itemTxs        ItemTransaction[] @relation("UserItemTxs")
+  processedTxs   ItemTransaction[] @relation("ProcessedItemTxs")
+
+  guestVisits    GuestVisit[]      @relation("HostGuestVisits")
+
+  @@index([name])
+  @@index([isActive])
+}
+
+model Role {
+  id        Int    @id @default(autoincrement())
+  name      String @unique
+
+  users     UserRole[]
+}
+
+model UserRole {
+  userId String
+  roleId Int
+
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+model CheckLog {
+  id           BigInt    @id @default(autoincrement())
+  userId       String
+  type         CheckType
+  eventTime    DateTime
+  note         String?
+
+  processedBy  String?
+  user         User     @relation("UserCheckLogs", fields: [userId], references: [id], onDelete: Restrict)
+  processor    User?    @relation("ProcessedCheckLogs", fields: [processedBy], references: [id], onDelete: Restrict)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  @@index([userId, eventTime(sort: Desc)])
+  @@index([eventTime(sort: Desc)])
+}
+
+model Item {
+  id                String   @id @default(uuid())
+  name              String
+  description       String?
+  totalQuantity     Int
+  availableQuantity Int
+  isActive          Boolean  @default(true)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deletedAt         DateTime?
+
+  transactions      ItemTransaction[]
+
+  @@index([isActive])
+  @@index([isActive, name])
+  @@index([name])
+}
+
+model ItemTransaction {
+  id           BigInt               @id @default(autoincrement())
+  itemId       String
+  userId       String
+  type         ItemTransactionType
+  eventTime    DateTime
+  qty          Int
+  note         String?
+
+  processedBy  String?
+
+  item         Item @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  user         User @relation("UserItemTxs", fields: [userId], references: [id], onDelete: Restrict)
+  processor    User? @relation("ProcessedItemTxs", fields: [processedBy], references: [id], onDelete: Restrict)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  @@index([eventTime(sort: Desc)])
+  @@index([userId, eventTime(sort: Desc)])
+  @@index([itemId, eventTime(sort: Desc)])
+  @@index([type])
+}
+
+//// GUEST MODELS ////
+
+model Guest {
+  id          String        @id @default(uuid()) @db.Uuid
+  name        String
+  phoneNumber String?
+  note        String?
+
+  visits      GuestVisit[]
+
+  @@index([name])
+}
+
+model GuestVisit {
+  id          BigInt         @id @default(autoincrement())
+  guestId     String        @db.Uuid
+  hostUserId  String
+  type        GuestVisitType
+  eventTime   DateTime
+  note        String?
+
+  guest       Guest         @relation(fields: [guestId], references: [id], onDelete: Restrict)
+  hostUser    User          @relation("HostGuestVisits", fields: [hostUserId], references: [id], onDelete: Restrict)
+
+  @@index([eventTime(sort: Desc)])
+  @@index([guestId, eventTime(sort: Desc)])
+  @@index([hostUserId, eventTime(sort: Desc)])
+}
